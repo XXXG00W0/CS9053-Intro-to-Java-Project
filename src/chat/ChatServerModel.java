@@ -1,9 +1,7 @@
 package chat;
 
-import java.awt.BorderLayout;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
@@ -12,27 +10,26 @@ import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.security.GeneralSecurityException;
 import java.security.Key;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Hashtable;
-import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.logging.Logger;
-
-import javax.crypto.BadPaddingException;
-import javax.crypto.IllegalBlockSizeException;
-import javax.crypto.NoSuchPaddingException;
 
 import encryption.Encryption;
 
 public class ChatServerModel {
 
-    private final static String HELLO = "HELLO";
-    private final static String CONNECTED = "CONNECTED";
-    private final static String DISCONNECT = "DISCONNECT";
-    private final static String TEST_ALIVE = "TEST_ALIVE";
+    public final static String HELLO = "HELLO";
+    public final static String CONNECTED = "CONNECTED";
+	public final static String LOGIN = "LOGIN";
+	public final static String REGISTER = "REGISTER";
+	public final static String OK = "OK";
+	public final static String NO_OK = "NO_OK";
+    public final static String DISCONNECT = "DISCONNECT";
+    public final static String TEST_ALIVE = "TEST_ALIVE";
 
     private final static int RUNNING = 1;
     private final static int SHUTDOWN = -1;
@@ -47,9 +44,16 @@ public class ChatServerModel {
     ExecutorService executor;
     private static final Logger logger = Logger.getLogger(ChatClientView.class.getName());
 
+    // private Connection jdbcConnection;
     // Socket socket;
+    private ServerDatabase db;
 
     public ChatServerModel() {
+        try{
+            db = new ServerDatabase();
+        } catch (SQLException | ClassNotFoundException e) {
+            System.exit(0);
+        } 
 
         try {
             privateKey = Encryption.readPrivateKey("keypairs/pkcs8_key");
@@ -99,7 +103,6 @@ public class ChatServerModel {
                 handlerThread.start();
             }
         }
-
     }
 
     class ClientHandler implements Runnable {
@@ -110,6 +113,8 @@ public class ChatServerModel {
         private Key communicationKey;
         DataInputStream fromClient;
         DataOutputStream toClient;
+        private boolean authentication_passed = false;
+        
 
         public ClientHandler(Socket socket, int clientNum, ChatServerModel server) {
             this.socket = socket;
@@ -131,6 +136,26 @@ public class ChatServerModel {
                 logger.info("Received from client "+ clientNum+": " + clientString);
                 if (clientString == null) {
                     break;
+                } else if (clientString.startsWith(LOGIN)) {
+                    User newUser = parseUserCredential(clientString);
+                    if (newUser == null)                        
+                        sendMessage(toClient, communicationKey, LOGIN+" "+NO_OK);
+                    boolean loginResult = handleLogin(newUser);
+                    if (loginResult){
+                        sendMessage(toClient, communicationKey, LOGIN+" "+OK);
+                    }else{
+                        sendMessage(toClient, communicationKey, LOGIN+" "+NO_OK);
+                    }
+                }else if (clientString.startsWith(REGISTER)){
+                    User newUser = parseUserCredential(clientString);
+                    if (newUser == null)                        
+                        sendMessage(toClient, communicationKey, REGISTER+" "+NO_OK);
+                    boolean registerResult = handleRegister(newUser);
+                    if (registerResult){
+                        sendMessage(toClient, communicationKey, REGISTER+" "+OK);
+                    }else{
+                        sendMessage(toClient, communicationKey, REGISTER+" "+NO_OK);
+                    }
                 } else if (clientString.equals(DISCONNECT)) {
                     logger.info("Client " + clientNum + " has left the chat\n");
                     server.broadcast("Client " + clientNum + " has left the chat\n", this);
@@ -143,6 +168,51 @@ public class ChatServerModel {
                 }
             }
             connectionCleanup(fromClient, toClient, socket);
+        }
+
+        private User parseUserCredential(String loginString){
+            /* Login string should be in the form of LOGIN <username> <password> */
+            String[] stringList = loginString.split(" ");
+            if (stringList.length != 3){
+                logger.warning("\""+loginString +"\" is not a valid login string");
+                return null;
+            }
+            String username  = stringList[1];
+            String password  = stringList[2];
+            return new User(username, password);
+        }
+
+        private boolean handleRegister(User user){
+            if (!(user instanceof User)){
+                return false;
+            }
+            String username  = user.getUsername();
+            String password  = user.getPassword();
+            if (db.checkUserExists(username)){
+                logger.info("username "+username+" already exists");
+                return false;
+            }
+            return db.createUser(username, password);
+        }
+        
+        private boolean handleLogin(User user) {
+            if(authentication_passed){
+                logger.info("Already logged in");
+                return true;
+            }
+            if ( !(user instanceof User)){
+                return false;
+            }
+            String username  = user.getUsername();
+            String password  = user.getPassword();
+            if (db.checkUsernameAndPassword(username, password)){
+                authentication_passed = true;
+                logger.info("Login with username "+username+" and password "+password);
+                return true;
+            }else{
+                logger.info("Login failed with username "+username+" and password "+password);
+                return false;
+            }  
         }
 
         public boolean handshake() {

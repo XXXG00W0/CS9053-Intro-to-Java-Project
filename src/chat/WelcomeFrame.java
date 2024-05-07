@@ -17,7 +17,7 @@ public class WelcomeFrame extends JFrame implements Runnable {
     private JButton loginButton;
     private JButton registerButton;
 
-    private final static Dimension SCREEN_RESOLUTION = Toolkit.getDefaultToolkit().getScreenSize(); 
+    private final static Dimension SCREEN_RESOLUTION = Toolkit.getDefaultToolkit().getScreenSize();
     private final static int SCREEN_WIDTH = SCREEN_RESOLUTION.width;
     private final static int SCREEN_HEIGHT = SCREEN_RESOLUTION.height;
     private int width = 300;
@@ -29,7 +29,7 @@ public class WelcomeFrame extends JFrame implements Runnable {
     private Color buttonHoverColor = new Color(215, 217, 220);
     private Font defualtFont = new Font("Helvetica", Font.PLAIN, 14);
     private Font itallicFont = new Font("Helvetica", Font.ITALIC, 14);
-    
+
     public WelcomeFrame() {
         super("Start chatting");
         this.setLayout(new BorderLayout());
@@ -51,7 +51,7 @@ public class WelcomeFrame extends JFrame implements Runnable {
             protected void paintComponent(Graphics g) {
                 if (getModel().isPressed()) {
                     g.setColor(buttonPressedColor);
-                }else if(getModel().isRollover()){
+                } else if (getModel().isRollover()) {
                     g.setColor(buttonHoverColor);
                 } else {
                     g.setColor(buttonBaseColor);
@@ -63,13 +63,13 @@ public class WelcomeFrame extends JFrame implements Runnable {
         loginButton.setFont(defualtFont);
         // loginButton.addActionListener(new LoginListener(true));
 
-        registerButton = new JButton("New user?"){
+        registerButton = new JButton("New user?") {
 
             @Override
             protected void paintComponent(Graphics g) {
                 if (getModel().isPressed()) {
                     g.setColor(buttonPressedColor);
-                }else if(getModel().isRollover()){
+                } else if (getModel().isRollover()) {
                     g.setColor(buttonHoverColor);
                 } else {
                     g.setColor(buttonBaseColor);
@@ -103,37 +103,40 @@ public class WelcomeFrame extends JFrame implements Runnable {
 
         this.add(gridPanel);
         this.setSize(width, height);
-        this.setLocation((SCREEN_WIDTH-width)/2, (SCREEN_HEIGHT-height)/2);
+        this.setLocation((SCREEN_WIDTH - width) / 2, (SCREEN_HEIGHT - height) / 2);
     }
 
-    public void addLoginListener(ActionListener listener){
+    public void addLoginListener(ActionListener listener) {
         loginButton.addActionListener(listener);
     }
 
-    public String getUsername(){
+    public void addRegisterListener(ActionListener listener) {
+        registerButton.addActionListener(listener);
+    }
+
+    public String getUsername() {
         return userNameField.getText().trim();
     }
 
-    public String getPassword(){
+    public String getPassword() {
         return pswdField.getText();
     }
 
     // class LoginListener implements ActionListener{
 
-    //     @Override
-    //     public void actionPerformed(ActionEvent e) {
-            
-    //     }
+    // @Override
+    // public void actionPerformed(ActionEvent e) {
+
+    // }
     // }
 
-    class RegisterListener implements ActionListener{
+    class RegisterListener implements ActionListener {
 
         @Override
         public void actionPerformed(ActionEvent e) {
-            
+
         }
 
-        
     }
 
     public static void main(String[] args) {

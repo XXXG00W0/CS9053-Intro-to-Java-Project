@@ -5,7 +5,6 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Toolkit;
-import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.logging.Logger;
 
@@ -13,7 +12,7 @@ import javax.swing.*;
 
 public class ChatClientView extends JFrame {
 
-    private final static Dimension SCREEN_RESOLUTION = Toolkit.getDefaultToolkit().getScreenSize(); 
+    private final static Dimension SCREEN_RESOLUTION = Toolkit.getDefaultToolkit().getScreenSize();
     private final static int SCREEN_WIDTH = SCREEN_RESOLUTION.width;
     private final static int SCREEN_HEIGHT = SCREEN_RESOLUTION.height;
     private int width = 400;
@@ -29,7 +28,6 @@ public class ChatClientView extends JFrame {
     private WelcomeFrame welcomeFrame;
 
     private static final Logger logger = Logger.getLogger(ChatClientView.class.getName());
-
 
     public ChatClientView() {
         super("Chat client");
@@ -74,30 +72,30 @@ public class ChatClientView extends JFrame {
         this.add(scrollPane, BorderLayout.CENTER);
         this.add(textField, BorderLayout.SOUTH);
         setSize(width, height);
-        this.setLocation((SCREEN_WIDTH-width)/2, (SCREEN_HEIGHT-height)/2);
+        this.setLocation((SCREEN_WIDTH - width) / 2, (SCREEN_HEIGHT - height) / 2);
 
         welcomeFrame = createWelcomeFrame();
         this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
     }
 
-    public void initiateWelcomeFrame(){
+    public void initiateWelcomeFrame() {
         welcomeFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         welcomeFrame.setVisible(true);
     }
 
-    public void closeWelcomeFrame(){
+    public void closeWelcomeFrame() {
         welcomeFrame.dispose();
     }
 
-    private WelcomeFrame createWelcomeFrame(){
+    private WelcomeFrame createWelcomeFrame() {
         return new WelcomeFrame();
     }
 
-    public String getUsername(){
+    public String getUsername() {
         return welcomeFrame.getUsername();
     }
 
-    public String getPassword(){
+    public String getPassword() {
         return welcomeFrame.getPassword();
     }
 
@@ -120,26 +118,30 @@ public class ChatClientView extends JFrame {
     public void addExitItemListener(ActionListener listener) {
         exitItem.addActionListener(listener);
     }
-    
-    public void addWelcomeLoginListener(ActionListener listener){
+
+    public void addWelcomeLoginListener(ActionListener listener) {
         welcomeFrame.addLoginListener(listener);
     }
 
-    public void appendTextArea(String string){
-        if (string.isBlank()){
+    public void addWelcomeRegisterListener(ActionListener listener) {
+        welcomeFrame.addRegisterListener(listener);
+    }
+
+    public void appendTextArea(String string) {
+        if (string.isBlank()) {
             logger.warning("[appendTextArea] String is blank");
-        }else if(string.charAt(string.length()-1) == '\n'){ 
+        } else if (string.charAt(string.length() - 1) == '\n') {
             textArea.append(string);
-        }else{
-            textArea.append(string+'\n');
+        } else {
+            textArea.append(string + '\n');
         }
     }
 
-    public void clearTextField(){
+    public void clearTextField() {
         textField.setText("");
     }
 
-    public String getTextField(){
+    public String getTextField() {
         return textField.getText();
     }
 

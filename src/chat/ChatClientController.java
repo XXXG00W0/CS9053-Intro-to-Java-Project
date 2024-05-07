@@ -1,19 +1,14 @@
 package chat;
 
+// import sqlite-jdbc-3.34.0.jar;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
-import java.security.InvalidAlgorithmParameterException;
-import java.security.InvalidKeyException;
-import java.security.NoSuchAlgorithmException;
 import java.util.logging.Logger;
 
-import javax.crypto.BadPaddingException;
-import javax.crypto.IllegalBlockSizeException;
-import javax.crypto.NoSuchPaddingException;
 import javax.swing.*;
 
 public class ChatClientController implements Runnable {
@@ -25,7 +20,9 @@ public class ChatClientController implements Runnable {
     private Thread receiverThread;
 
     private LoginListener loginListener;
-
+    private RegisterListener registerListener;
+    
+    private final static String LOGIN = "LOGIN";
     private static final Logger logger = Logger.getLogger(ChatClientView.class.getName());
 
     public ChatClientController(ChatClientModel model, ChatClientView view) {
@@ -36,6 +33,8 @@ public class ChatClientController implements Runnable {
 
         loginListener = new LoginListener();
         view.addWelcomeLoginListener(loginListener);
+        registerListener = new RegisterListener();
+        view.addWelcomeRegisterListener(registerListener);
         view.addTextFieldListener(new textFieldListener());
 
         view.addWindowListener(new WindowAdapter() {
@@ -152,8 +151,10 @@ public class ChatClientController implements Runnable {
                 model.login(view.getUsername(), view.getPassword());
                 if (model.getStatus() == ChatClientModel.INCORRECT_CERTIFICATION) {
                     message = "Incorrect username / password";
+                    model.setStatus(ChatClientModel.INCORRECT_CERTIFICATION);
                 } else if (model.getStatus() == ChatClientModel.CERTIFICATED) {
                     message = "Connected!";
+                    model.setStatus(ChatClientModel.CERTIFICATED);
                     // dispose welcome window after logged in
                     view.closeWelcomeFrame();
                 } else {
@@ -198,6 +199,63 @@ public class ChatClientController implements Runnable {
             label.setText(message + " (" + seconds + ")");
         }
     }
+
+    public class RegisterListener implements ActionListener {
+        JOptionPane pane;
+        JDialog dialog;
+        JLabel countdownLabel = new JLabel();
+        int count = 3;
+        String message = "";
+
+        // String message = model.getStatus() == CERTIFICATED ? "Login
+        // Successful!" : "Login Failed...";
+
+        public RegisterListener() {
+            pane = new JOptionPane(countdownLabel, JOptionPane.INFORMATION_MESSAGE);
+            countdownLabel.setText(message + " (" + count + ")");
+            dialog = pane.createDialog(null, "Login prompt");
+            dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+            dialog.setModal(false); // set dialog to non modal
+        }
+
+        public void register() {
+            if (model.getStatus() == ChatClientModel.NOT_CONNECTED) {
+                model.handshake();
+            }
+            if (model.getStatus() == ChatClientModel.HANDSHAKE_FAILED) {
+                message = "Handshake failed";
+                model.setStatus(ChatClientModel.NOT_CONNECTED);
+            } else if (model.getStatus() == ChatClientModel.HANDSHAKE_OK) {
+                // proceed to register stage
+                boolean register_successful = model.register(view.getUsername(), view.getPassword());
+                if (!register_successful) {
+                    message = "Unable to register, consider a different username";
+                } else {
+                    message = "Register successful, please procceed to login";
+                }
+            } else {
+                message = "Illegal Status: " + model.getStatus() +'\n';
+                logger.severe(message);
+            }
+        }
+
+        public void showCountdownPrompt() {
+            // countdownLabel.setText(message + " (" + count + ")");
+            countdownLabel.setText(message);
+            dialog.setVisible(true);
+        }
+
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            register();
+            showCountdownPrompt();
+        }
+
+        private void updateCountdownLabel(JLabel label, int seconds) {
+            label.setText(message + " (" + seconds + ")");
+        }
+    }
+
 
     @Override
     public void run() {

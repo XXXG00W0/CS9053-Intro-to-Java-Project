@@ -3,7 +3,6 @@ package chat;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.net.Inet4Address;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.security.GeneralSecurityException;
@@ -14,13 +13,11 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.concurrent.ExecutorService;
 import java.util.logging.Logger;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
-import javax.net.ssl.SSLEngineResult.HandshakeStatus;
 
 import encryption.Encryption;
 
@@ -28,6 +25,10 @@ public class ChatClientModel implements Runnable {
 
 	public final static String HELLO = "HELLO";
 	public final static String CONNECTED = "CONNECTED";
+	private final static String LOGIN = "LOGIN";
+	public final static String REGISTER = "REGISTER";
+	private final static String OK = "OK";
+	private final static String NO_OK = "NO_OK";
 	public final static String DISCONNECT = "DISCONNECT";
 	public final static String TEST_ALIVE = "TEST_ALIVE";
 
@@ -132,15 +133,60 @@ public class ChatClientModel implements Runnable {
 		return false;
 	}
 
-	public boolean login(String username, String pswd) {
-		// to-do verify username pswd combination via database connection
-		status = CERTIFICATED;
-		return true;
+	public boolean register(String username, String password){
+		try{
+			sendMessage(REGISTER+" "+username+" "+password, true);
+			String message = receiveMessage(true);
+			logger.info("Register process receive from server: "+message);
+			String[] msgList = message.split(" ");
+			if (msgList.length != 2){
+				logger.info("Invalid register message from server: "+ message);
+				return false;
+			}
+			if (msgList[0] != REGISTER | msgList[1] != OK | msgList[1] != NO_OK){
+				logger.info("Invalid register message from server: "+ message);
+				return false;
+			}
+			if(msgList[1] == OK)
+				return true;
+			else if(msgList[1] == NO_OK)
+				return false;
+		}catch(IOException | GeneralSecurityException e){
+		}
+		return false;
+	}
+
+	public boolean login(String username, String password) {
+		try{
+			sendMessage(LOGIN+" "+username+" "+password, true);
+			String message = receiveMessage(true);
+			String[] msgList = message.split(" ");
+			if (msgList.length != 2){
+				logger.info("Invalid login message from server: "+ message);
+				return false;
+			}
+			if (msgList[0] != LOGIN | msgList[1] != OK | msgList[1] != NO_OK){
+				logger.info("Invalid login message from server: "+ message);
+				return false;
+			}
+			if(msgList[1] == OK){
+				status = CERTIFICATED;
+				return true;
+			}
+			else if(msgList[1] == NO_OK){
+				return false;
+			}
+		}catch(IOException | GeneralSecurityException e){
+		}
+		return false;
 	}
 
 	public void connectionCleanup() {
 		try {
-			sendString(toServer, null, DISCONNECT);
+			if(communicationKey.equals(null))
+				sendString(toServer, null, DISCONNECT);
+			else
+				sendString(toServer, communicationKey, DISCONNECT);
 			fromServer.close();
 			toServer.close();
 			socket.close();

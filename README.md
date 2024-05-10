@@ -25,12 +25,12 @@ To initiate a chat server, please run `ChatServerController.java`. To initate a 
 
 ## Files
 
-│  .classpath
-│  .DS_Store
-│  .gitattributes
-│  .gitignore
-│  .project
-│  hamcrest-core-1.3.jar
+│  .classpath  
+│  .DS_Store  
+│  .gitattributes  
+│  .gitignore  
+│  .project  
+│  hamcrest-core-1.3.jar  
 │  junit-4.13.2.jar
 │  README.md
 │  server.db

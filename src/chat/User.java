@@ -4,10 +4,23 @@ public class User {
 
     private String username;
     private String password;
+    private String newUsername;
+    private String newPassword;
+
 
     public User(String username, String password){
         this.username = username;
         this.password = password;
+    }
+
+    public User(String username, String password, String newCredential, String credentialType){
+        this.username = username;
+        this.password = password;
+        if (credentialType.equals("password"))
+            this.newPassword = newCredential;
+        else if (credentialType.equals("username"))
+            this.newUsername= newCredential;
+        
     }
 
     // public User(String rawString) throws IllegalArgumentException{

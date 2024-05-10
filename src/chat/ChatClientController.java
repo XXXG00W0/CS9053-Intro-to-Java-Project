@@ -6,23 +6,31 @@ import java.awt.event.ActionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.IOException;
+import java.nio.file.attribute.AclFileAttributeView;
 import java.security.GeneralSecurityException;
+import java.util.Arrays;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.logging.Logger;
 
+import javax.sql.rowset.spi.SyncFactoryException;
 import javax.swing.*;
 
 public class ChatClientController implements Runnable {
 
     private ChatClientModel model;
     private ChatClientView view;
+    private SettingFrame settingFrame;
 
     private Thread senderThread;
     private Thread receiverThread;
 
+    private String username;
+
     private LoginListener loginListener;
     private RegisterListener registerListener;
-    
-    private final static String LOGIN = "LOGIN";
+
+    // private final static String LOGIN = "LOGIN";
     private static final Logger logger = Logger.getLogger(ChatClientView.class.getName());
 
     public ChatClientController(ChatClientModel model, ChatClientView view) {
@@ -61,23 +69,38 @@ public class ChatClientController implements Runnable {
                 }
             }
         });
+        settingFrame = new SettingFrame();
+        settingFrame.setConfirmListner(new SettingConfirmListener());
+        settingFrame.setCancelListner(new SettingCancelListener());
+        view.addSettingItemListener(new openSettingPanelListener());
+
         // heartBeatTimer.start();
     }
 
     private void receiveFromServer() {
         while (!Thread.currentThread().isInterrupted()) {
             String text = model.receiveMessage(true);
+            logger.info("Receive from server: " + text);
             // put
             if (text.equals(ChatClientModel.DISCONNECT)) {
                 model.connectionCleanup();
                 view.appendTextArea("Server disconnected\n");
                 break;
-            }
-            if (model.getStatus() != ChatClientModel.CERTIFICATED) {
-                view.appendTextArea("Welcome\n");
+            }String[] stringList = text.split(" ");
+            String action = stringList[0];
+            boolean isAction = Arrays.stream(ChatClientModel.ACTION_LIST).anyMatch(e -> e.equals(action));
+            if (isAction) {
+                try {
+                    logger.info("Put server reply: " + text);
+                    model.messageQueue.put(text);
+                } catch (InterruptedException ie) {
+                    logger.warning("Putting message " + text + "with InterruptedException:\n" + ie.getMessage());
+                }
+            } else if (model.getStatus() == ChatClientModel.CERTIFICATED) {
+                // view.appendTextArea("Welcome\n");
+                view.appendTextArea(text);
                 logger.info(text);
             }
-            view.appendTextArea(text);
         }
     }
 
@@ -92,7 +115,8 @@ public class ChatClientController implements Runnable {
             try {
                 text = view.getTextField().trim();
                 if (text.length() != 0) {
-                    model.sendMessage(text + '\n', true);
+                    // message start with MSG
+                    model.sendMessage(ChatClientModel.MSG + " " + text + '\n', true);
                     view.appendTextArea(text + '\n');
                     view.clearTextField();
                 } else {
@@ -106,15 +130,15 @@ public class ChatClientController implements Runnable {
         }
     }
 
-    private class ExitListener implements ActionListener{
+    private class ExitListener implements ActionListener {
 
         @Override
-        public void actionPerformed(ActionEvent e){
-            try{
+        public void actionPerformed(ActionEvent e) {
+            try {
                 receiverThread.interrupt();
                 model.connectionCleanup();
                 logger.info("connection closed");
-            }finally{
+            } finally {
                 view.dispose();
                 System.exit(0);
             }
@@ -143,26 +167,26 @@ public class ChatClientController implements Runnable {
             if (model.getStatus() == ChatClientModel.NOT_CONNECTED) {
                 model.handshake();
             }
-            if (model.getStatus() == ChatClientModel.HANDSHAKE_FAILED) {
+            if (model.getStatus() == ChatClientModel.NOT_CONNECTED) {
                 message = "Handshake failed";
-                model.setStatus(ChatClientModel.NOT_CONNECTED);
             } else if (model.getStatus() == ChatClientModel.HANDSHAKE_OK) {
+                logger.info("Handshake ok then login");
                 // proceed to certification stage
-                model.login(view.getUsername(), view.getPassword());
-                if (model.getStatus() == ChatClientModel.INCORRECT_CERTIFICATION) {
-                    message = "Incorrect username / password";
-                    model.setStatus(ChatClientModel.INCORRECT_CERTIFICATION);
-                } else if (model.getStatus() == ChatClientModel.CERTIFICATED) {
+                String username = view.getUsername();
+                String password = view.getPassword();
+                if (username.equals("") | password.equals("")) {
+                    message = "Empty username or password";
+                } else if (model.login(username, password)) {
                     message = "Connected!";
                     model.setStatus(ChatClientModel.CERTIFICATED);
+                    model.setUsername(username);
                     // dispose welcome window after logged in
                     view.closeWelcomeFrame();
                 } else {
-                    message = "Illegal Status: " + model.getStatus() +'\n';
-                    logger.severe(message);
+                    message = "Incorrect username / password";
                 }
             } else {
-                message = "Illegal Status: " + model.getStatus() +'\n';
+                message = "Illegal Status: " + model.getStatus() + '\n';
                 logger.severe(message);
             }
         }
@@ -173,18 +197,18 @@ public class ChatClientController implements Runnable {
             dialog.setVisible(true);
             // set timer that update countdown label every 1000 ms / 1 sec
             // Timer timer = new Timer(1000, new ActionListener() {
-            //     int countdown = count;
+            // int countdown = count;
 
-            //     @Override
-            //     public void actionPerformed(ActionEvent e) {
-            //         if (countdown > 0) {
-            //             countdown--;
-            //             updateCountdownLabel(countdownLabel, countdown);
-            //         } else {
-            //             ((Timer) e.getSource()).stop();
-            //             dialog.dispose();
-            //         }
-            //     }
+            // @Override
+            // public void actionPerformed(ActionEvent e) {
+            // if (countdown > 0) {
+            // countdown--;
+            // updateCountdownLabel(countdownLabel, countdown);
+            // } else {
+            // ((Timer) e.getSource()).stop();
+            // dialog.dispose();
+            // }
+            // }
             // });
             // timer.start();
         }
@@ -213,7 +237,7 @@ public class ChatClientController implements Runnable {
         public RegisterListener() {
             pane = new JOptionPane(countdownLabel, JOptionPane.INFORMATION_MESSAGE);
             countdownLabel.setText(message + " (" + count + ")");
-            dialog = pane.createDialog(null, "Login prompt");
+            dialog = pane.createDialog(null, "Register prompt");
             dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
             dialog.setModal(false); // set dialog to non modal
         }
@@ -222,19 +246,22 @@ public class ChatClientController implements Runnable {
             if (model.getStatus() == ChatClientModel.NOT_CONNECTED) {
                 model.handshake();
             }
-            if (model.getStatus() == ChatClientModel.HANDSHAKE_FAILED) {
+            if (model.getStatus() == ChatClientModel.NOT_CONNECTED) {
                 message = "Handshake failed";
-                model.setStatus(ChatClientModel.NOT_CONNECTED);
             } else if (model.getStatus() == ChatClientModel.HANDSHAKE_OK) {
                 // proceed to register stage
-                boolean register_successful = model.register(view.getUsername(), view.getPassword());
-                if (!register_successful) {
+                logger.info("Handshake ok then register");
+                String username = view.getUsername();
+                String password = view.getPassword();
+                if (username.equals("") | password.equals("")) {
+                    message = "Empty username or password";
+                } else if (!model.register(username, password)) {
                     message = "Unable to register, consider a different username";
                 } else {
                     message = "Register successful, please procceed to login";
                 }
             } else {
-                message = "Illegal Status: " + model.getStatus() +'\n';
+                message = "Illegal Status: " + model.getStatus() + '\n';
                 logger.severe(message);
             }
         }
@@ -242,6 +269,7 @@ public class ChatClientController implements Runnable {
         public void showCountdownPrompt() {
             // countdownLabel.setText(message + " (" + count + ")");
             countdownLabel.setText(message);
+            dialog.pack();
             dialog.setVisible(true);
         }
 
@@ -256,6 +284,90 @@ public class ChatClientController implements Runnable {
         }
     }
 
+    public class openSettingPanelListener implements ActionListener {
+
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            settingFrame.setUsername(model.getUsername());
+            settingFrame.setVisible(true);
+        }
+    }
+
+    public class SettingConfirmListener implements ActionListener {
+
+        JOptionPane pane;
+        JDialog dialog;
+        JLabel countdownLabel = new JLabel();
+        String message = "";
+
+        public SettingConfirmListener() {
+
+            pane = new JOptionPane(countdownLabel, JOptionPane.INFORMATION_MESSAGE);
+            countdownLabel.setText(message);
+            dialog = pane.createDialog(null, "Setting prompt");
+            dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+            dialog.setModal(false); // set dialog to non modal
+        }
+
+        @Override
+        public void actionPerformed(ActionEvent e){
+            String username = settingFrame.getUsername();
+            String password = settingFrame.getPassword();
+            String option = settingFrame.getSelectedOption();
+            if (model.getUsername().equals(username)){
+                if (option.equals("password")){
+                    String newPassword = settingFrame.getNewPassword();
+                    if(model.changePassword(username, password, newPassword)){
+                        message = "Change password successful";
+                    }else{
+                        message = "Change password failed";
+                    }
+                } else if (option.equals("username")){
+                    String newUsername = settingFrame.getNewUsername();
+                    if(model.changeUsername(username, newUsername, password)){
+                        model.setUsername(newUsername);
+                        settingFrame.setUsername(newUsername);
+                        message = "Change username successful";
+                    }else{
+                        message = "Change username failed";
+                    }
+                }else if (option.equals("delete")){
+                    if(model.deleteAccount(username, password)){
+                        model.setUsername("");
+                        settingFrame.dispose();
+                        view.initiateWelcomeFrame();
+                        model.setStatus(ChatClientModel.HANDSHAKE_OK);
+                        message = "Account deleted";
+                    }else{
+                        message = "Invalid username or password";
+                    }
+
+                }else{
+                    message = "Invalid option: "+ option;
+                }
+            }else{
+                message = "Invalid username";
+            }
+            
+           
+            showPrompt();
+        }
+
+        public void showPrompt() {
+            // countdownLabel.setText(message + " (" + count + ")");
+            countdownLabel.setText(message);
+            dialog.pack();
+            dialog.setVisible(true);
+        }
+    }
+
+    public class SettingCancelListener implements ActionListener {
+
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            settingFrame.dispose();
+        }
+    }
 
     @Override
     public void run() {

@@ -69,45 +69,102 @@ public class ServerDatabase {
     }
 
     public boolean createUser(String username, String password) {
-        boolean success = false;
         if (checkUserExists(username)) {
-            logger.warning("Username" + username + "already exists");
-            return success;
+            logger.warning("Username " + username + " already exists");
+            return false;
         }
-        try {
-            conn = DriverManager.getConnection(URL);
-            String sql = "INSERT INTO authentication (username, password) VALUES (?, ?)";
-            pstmt = conn.prepareStatement(sql);
+
+        String sql = "INSERT INTO authentication (username, password) VALUES (?, ?)";
+        try (Connection conn = DriverManager.getConnection(URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, username);
             pstmt.setString(2, password);
             pstmt.executeUpdate();
-            logger.info("Successfully create username: " + username + " with password: " + password);
-            success = true;
+            logger.info("Successfully created username: " + username + " with password: " + password);
+            return true;
         } catch (SQLException sqle) {
-            logger.warning("Creating username " + username + "gets exception:\n" + sqle.getMessage());
-        } finally {
-            try {
-                if (pstmt != null)
-                    pstmt.close();
-                if (conn != null)
-                    conn.close();
-            } catch (SQLException sqle) {
-            }
-            ;
+            logger.warning("Creating username " + username + " gets exception:\n" + sqle.getMessage());
+            return false;
         }
-        return success;
     }
 
-    public boolean updateUsername(String username, String password) {
-        return false;
+    public boolean updateUsername(String oldUsername, String password, String newUsername) {
+        // Verify if old username and password is in the database 
+        if (!checkUsernameAndPassword(oldUsername, password)) {
+            logger.info("Username and password do not match");
+            return false;
+        }
+
+        String sql = "UPDATE authentication SET username = ? WHERE username = ? AND password = ?";
+        try (Connection conn = DriverManager.getConnection(URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, newUsername);
+            pstmt.setString(2, oldUsername);
+            pstmt.setString(3, password);
+            int affectedRows = pstmt.executeUpdate();
+            if (affectedRows > 0) {
+                logger.info("Username successfully updated from " + oldUsername + " to " + newUsername);
+                return true;
+            } else {
+                logger.info("No rows affected.");
+                return false;
+            }
+        } catch (SQLException sqle) {
+            logger.warning("Updating username encountered an exception: " + sqle.getMessage());
+            return false;
+        }
     }
 
-    public boolean updatePassword(String username, String password) {
-        return false;
+    public boolean updatePassword(String username, String oldPassword, String newPassword) {
+        // Verify if old username and password is in the database 
+        if (!checkUsernameAndPassword(username, oldPassword)) {
+            logger.info("Username and password do not match");
+            return false;
+        }
+
+        String sql = "UPDATE authentication SET password = ? WHERE username = ?";
+        try (Connection conn = DriverManager.getConnection(URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, newPassword); // to-do Bcrypt encryption
+            pstmt.setString(2, username);
+            int affectedRows = pstmt.executeUpdate();
+            if (affectedRows > 0) {
+                logger.info("Password successfully updated for username: " + username);
+                return true;
+            } else {
+                logger.info("No rows affected.");
+                return false;
+            }
+        } catch (SQLException sqle) {
+            logger.warning("Updating password encountered an exception: " + sqle.getMessage());
+            return false;
+        }
     }
 
     public boolean deleteUser(String username, String password) {
-        return false;
+        // Verify if old username and password is in the database 
+        if (!checkUsernameAndPassword(username, password)) {
+            logger.info("Username or password is incorrect");
+            return false;
+        }
+
+        String sql = "DELETE FROM authentication WHERE username = ? AND password = ?";
+        try (Connection conn = DriverManager.getConnection(URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, username);
+            pstmt.setString(2, password);
+            int affectedRows = pstmt.executeUpdate();
+            if (affectedRows > 0) {
+                logger.info("User successfully deleted: " + username);
+                return true;
+            } else {
+                logger.info("No rows affected. User not found or wrong password.");
+                return false;
+            }
+        } catch (SQLException sqle) {
+            logger.warning("Error deleting user " + username + ": " + sqle.getMessage());
+            return false;
+        }
     }
 
     public String getURL() {
@@ -116,6 +173,20 @@ public class ServerDatabase {
 
     public String getDbName() {
         return DB_NAME;
+    }
+
+    public boolean deleteTable() {
+        // equivalent to TRUNCATE
+        String sql = "DELETE FROM "+DB_NAME+";";
+        try (Connection conn = DriverManager.getConnection(URL);
+                Statement stmt = conn.createStatement()) {
+            stmt.executeUpdate(sql);
+            System.out.println("Table has been deleted successfully.");
+            return true;
+        } catch (SQLException e) {
+            logger.warning("SQL Error while truncating db: " + e.getMessage());
+        }
+        return false;
     }
 
 }

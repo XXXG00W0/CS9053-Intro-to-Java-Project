@@ -35,13 +35,19 @@ public class ServerDatabaseTest {
 
     @Before
     public void runBefore() throws ClassNotFoundException, SQLException {
-        deleteDbFile();
+        // deleteDbFile();
+        // db = new ServerDatabase();
+            
         db = new ServerDatabase();
+        if (db != null)
+            db.deleteTable();
+        
     }
 
     @Test
-    public void constructorTest() throws SQLException {
+    public void constructorTest() throws SQLException, ClassNotFoundException {
         ResultSet result;
+        db = new ServerDatabase();
         Connection con = DriverManager.getConnection(db.getURL());
         String sql = "SELECT * FROM " + db.getDbName() + ";";
         PreparedStatement pstmt = con.prepareStatement(sql);
@@ -49,6 +55,10 @@ public class ServerDatabaseTest {
         assertFalse(result.next());
         pstmt.close();
         con.close();
+    }
+    @Test
+    public void deleteTableTest(){
+        assertTrue(db.deleteTable());
     }
 
     @Test
@@ -86,8 +96,8 @@ public class ServerDatabaseTest {
     @Test
     public void checkUserExistsTest() {
         // ServerDatabase db = new ServerDatabase();
-        String username = "abc";
-        String password = "12123";
+        String username = "def";
+        String password = "123";
         assertFalse(db.checkUserExists(username));
         db.createUser(username, password);
         assertTrue(db.checkUserExists(username));
@@ -95,17 +105,63 @@ public class ServerDatabaseTest {
 
     @Test
     public void checkUsernameAndPasswordTest(){
-        String username1 = "abc";
-        String username2 = "ABC";
+        String username1 = "ghi";
+        String username2 = "GHI";
+        String password1 = "123";
+        String password2 = "234";
+        assertTrue(db.createUser(username1, password1));
+        assertTrue(db.checkUsernameAndPassword(username1, password1));
+        assertTrue(db.createUser(username2, password2));
+        assertTrue(db.checkUsernameAndPassword(username2, password2));
+        // duplicate username
+        assertFalse(db.checkUsernameAndPassword(username1, password2));
+        // duplicate username
+        assertFalse(db.checkUsernameAndPassword(username2, password1));
+    }
+
+    @Test
+    public void updateUsernameTest(){
+        String username1 = "ghi";
+        String username2 = "GHI";
         String password1 = "123";
         String password2 = "234";
         db.createUser(username1, password1);
-        assertTrue(db.checkUsernameAndPassword(username1, password1));
-        db.createUser(username2, password2);
-        assertTrue(db.checkUsernameAndPassword(username2, password2));
-        assertFalse(db.checkUsernameAndPassword(username1, password2));
-        assertFalse(db.checkUsernameAndPassword(username2, password1));
+        // Wrong password
+        assertFalse(db.updateUsername(username1, password2, username2));
+        // Correct password
+        assertTrue(db.updateUsername(username1, password1, username2));
+        assertTrue(db.checkUsernameAndPassword(username2, password1));
+    }
 
+    @Test
+    public void updatePasswordTest(){
+        String username1 = "ghi";
+        String username2 = "GHI";
+        String password1 = "123";
+        String password2 = "234";
+        db.createUser(username2, password2);        
+        // Wrong password
+        assertFalse(db.updatePassword(username1, password1, password2));
+        // correct password
+        assertTrue(db.updatePassword(username2, password2, password1));
+        assertTrue(db.checkUsernameAndPassword(username2, password1));
+    }
+
+    @Test
+    public void deleteUserTest(){
+        String username1 = "ghi";
+        String username2 = "GHI";
+        String password1 = "123";
+        String password2 = "234";
+        db.createUser(username2, password2);        
+        // Wrong password
+        assertFalse(db.deleteUser(username2, password1));
+        // Not deleted from table
+        assertTrue(db.checkUserExists(username2));
+        // correct password
+        assertTrue(db.deleteUser(username2, password2));
+        // deleted from table
+        assertFalse(db.checkUserExists(username2));
     }
 
 }

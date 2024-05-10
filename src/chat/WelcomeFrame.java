@@ -7,7 +7,7 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 
-public class WelcomeFrame extends JFrame implements Runnable {
+public class WelcomeFrame extends JFrame {
 
     private JTextField userNameField;
     private JTextField pswdField;
@@ -144,11 +144,6 @@ public class WelcomeFrame extends JFrame implements Runnable {
         welcomeFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         welcomeFrame.setVisible(true);
         welcomeFrame.setResizable(false);
-    }
-
-    @Override
-    public void run() {
-
     }
 
 }

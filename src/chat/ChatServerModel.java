@@ -12,6 +12,7 @@ import java.security.GeneralSecurityException;
 import java.security.Key;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.Hashtable;
 import java.util.Map.Entry;
@@ -28,8 +29,13 @@ public class ChatServerModel {
 	public final static String REGISTER = "REGISTER";
 	public final static String OK = "OK";
 	public final static String NO_OK = "NO_OK";
+    public final static String MSG = "MSG";
     public final static String DISCONNECT = "DISCONNECT";
     public final static String TEST_ALIVE = "TEST_ALIVE";
+	public final static String CHANGE_PSWD = "CHANGE_PSWD";
+	public final static String CHANGE_USER = "CHANGE_USER";
+    public final static String DELETE = "DELETE";
+	public final static String[] ACTION_LIST = {LOGIN, REGISTER, CHANGE_PSWD, CHANGE_USER, DELETE};
 
     private final static int RUNNING = 1;
     private final static int SHUTDOWN = -1;
@@ -114,6 +120,7 @@ public class ChatServerModel {
         DataInputStream fromClient;
         DataOutputStream toClient;
         private boolean authentication_passed = false;
+        private String username;
         
 
         public ClientHandler(Socket socket, int clientNum, ChatServerModel server) {
@@ -134,52 +141,63 @@ public class ChatServerModel {
             while (true) {
                 String clientString = receiveMessage(fromClient, communicationKey);
                 logger.info("Received from client "+ clientNum+": " + clientString);
-                if (clientString == null) {
-                    break;
-                } else if (clientString.startsWith(LOGIN)) {
-                    User newUser = parseUserCredential(clientString);
-                    if (newUser == null)                        
-                        sendMessage(toClient, communicationKey, LOGIN+" "+NO_OK);
-                    boolean loginResult = handleLogin(newUser);
-                    if (loginResult){
-                        sendMessage(toClient, communicationKey, LOGIN+" "+OK);
-                    }else{
-                        sendMessage(toClient, communicationKey, LOGIN+" "+NO_OK);
-                    }
-                }else if (clientString.startsWith(REGISTER)){
-                    User newUser = parseUserCredential(clientString);
-                    if (newUser == null)                        
-                        sendMessage(toClient, communicationKey, REGISTER+" "+NO_OK);
-                    boolean registerResult = handleRegister(newUser);
-                    if (registerResult){
-                        sendMessage(toClient, communicationKey, REGISTER+" "+OK);
-                    }else{
-                        sendMessage(toClient, communicationKey, REGISTER+" "+NO_OK);
-                    }
-                } else if (clientString.equals(DISCONNECT)) {
-                    logger.info("Client " + clientNum + " has left the chat\n");
-                    server.broadcast("Client " + clientNum + " has left the chat\n", this);
+                if (clientString == null)break;
+                boolean success = parseUserCredential(clientString);
+                if (success) continue;
+                else if (clientString.equals(DISCONNECT)) {
+                    logger.info("Client " + clientNum +" "+this.username+" has left the chat\n");
+                    server.broadcast("User <"+this.username+"> has left the chat\n", this);
                     break;
                 } else if (clientString.equals(TEST_ALIVE)) {
-                    logger.info("Client " + clientNum + " connection is alive\n");
-                } else {
-                    // logger.info("Client " + clientNum + ": " + clientString);
-                    server.broadcast(clientString, this);
+                    logger.info("Client " + clientNum +" "+this.username+" connection is alive\n");
+                } else if (clientString.startsWith(MSG)){
+                    logger.info("Client " + clientNum +" "+this.username+"message: " + clientString);
+                    server.broadcast(clientString.substring(MSG.length()+1), this);
+                }else{
+                    logger.warning("Invaid string received: "+clientString);
                 }
             }
             connectionCleanup(fromClient, toClient, socket);
         }
 
-        private User parseUserCredential(String loginString){
+        private boolean parseUserCredential(String rawString){
             /* Login string should be in the form of LOGIN <username> <password> */
-            String[] stringList = loginString.split(" ");
-            if (stringList.length != 3){
-                logger.warning("\""+loginString +"\" is not a valid login string");
-                return null;
+            String[] stringList = rawString.split(" ");
+            String action = stringList[0];
+            boolean isAction = Arrays.stream(ACTION_LIST).anyMatch(e -> e.equals(action));
+            if (!isAction){
+                logger.warning("\""+rawString +"\" contains invalid action keyword");
+                return false;
+            }
+            
+            if (stringList.length >= 0 & stringList.length < 3){ // 0 1 2
+                logger.warning("\""+rawString +"\" is not a valid raw string for user credential");
+                sendMessage(toClient, communicationKey, action+" "+NO_OK);
+                return false;
             }
             String username  = stringList[1];
             String password  = stringList[2];
-            return new User(username, password);
+            User user = new User(username, password);
+            boolean success = false;
+            if (action.equals(LOGIN)){
+                success = handleLogin(user);
+            }else if (action.equals(REGISTER)){
+                success = handleRegister(user);
+            } else if (action.equals(DELETE)){
+                success = handleDelete(user);
+            }else if (action.equals(CHANGE_PSWD) & stringList.length == 4){
+                success = handleChangePassword(user, stringList[3]);
+            }else if (action.equals(CHANGE_USER) & stringList.length == 4){
+                success = handleChangeUsername(user, stringList[3]);
+            }
+
+            if (success){
+                sendMessage(toClient, communicationKey, action+" "+OK);
+            }else{
+                sendMessage(toClient, communicationKey, action+" "+NO_OK);
+            }
+            // Parse 
+            return true;
         }
 
         private boolean handleRegister(User user){
@@ -188,10 +206,6 @@ public class ChatServerModel {
             }
             String username  = user.getUsername();
             String password  = user.getPassword();
-            if (db.checkUserExists(username)){
-                logger.info("username "+username+" already exists");
-                return false;
-            }
             return db.createUser(username, password);
         }
         
@@ -208,11 +222,48 @@ public class ChatServerModel {
             if (db.checkUsernameAndPassword(username, password)){
                 authentication_passed = true;
                 logger.info("Login with username "+username+" and password "+password);
+                this.username = username;
+                return true;
+            }else{
+                authentication_passed = false;
+                logger.info("Login failed with username "+username+" and password "+password);
+                return false;
+            }  
+        }
+
+        private boolean handleDelete(User user){
+            String username  = user.getUsername();
+            String password  = user.getPassword();
+            if (db.checkUsernameAndPassword(username, password)){
+                logger.info("Delete account with username "+username+" and password "+password);
+                this.username = "";
+                db.deleteUser(username, password);
+                authentication_passed = false;
                 return true;
             }else{
                 logger.info("Login failed with username "+username+" and password "+password);
                 return false;
-            }  
+            }
+        }
+
+        private boolean handleChangePassword(User user, String newPassword){
+            String username  = user.getUsername();
+            String password  = user.getPassword();
+            boolean res = db.updatePassword(username, password, newPassword);
+            logger.info("User "+username+" Change password from "+password+" to "+newPassword);
+            logger.info("Action successful? "+res);               
+            return res;
+        }
+
+        private boolean handleChangeUsername(User user, String newUsername){
+            String username  = user.getUsername();
+            String password  = user.getPassword();
+            boolean res = db.updateUsername(username, password, newUsername);
+            logger.info("User "+username+" change to "+newUsername+" with password "+password);
+            logger.info("Action successful? "+res);
+            if (res)
+                this.username = username;              
+            return res;
         }
 
         public boolean handshake() {
@@ -316,13 +367,14 @@ public class ChatServerModel {
             ClientHandler handler = entry.getKey();
             if (!handler.equals(thisHandler)) {
                 sendMessage(handler.toClient, handler.communicationKey,
-                        "Client " + thisHandler.clientNum + ": " + message);
+                        "User <" + thisHandler.username + ">: " + message);
             }
         }
     }
 
     public void sendMessage(DataOutputStream outStream, Key key, String message) {
         try {
+            logger.info("Send message to client: "+message);
             String encryptedMessage = Encryption.encrypt(key, message);
             outStream.writeUTF(encryptedMessage);
             outStream.flush();
@@ -348,6 +400,7 @@ public class ChatServerModel {
             logger.info("Client sends:");
         } catch (IOException ioe) {
             logger.warning("Cannot receive message with inStream: " + inStream + '\n');
+            // throw(ioe);
         } catch (GeneralSecurityException e) {
             logger.warning("Cannot decrypt message with key: " + key + '\n');
         }

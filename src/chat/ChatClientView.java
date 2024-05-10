@@ -22,8 +22,10 @@ public class ChatClientView extends JFrame {
     private Color buttonPressedColor = new Color(223, 225, 229);
     private Color buttonBaseColor = new Color(242, 243, 245);
     private Color buttonHoverColor = new Color(215, 217, 220);
+    private Color warningTextColor = new Color(255, 0, 0);
     private Font defualtFont = new Font("Helvetica", Font.PLAIN, 14);
     private Font itallicFont = new Font("Helvetica", Font.ITALIC, 14);
+    private Font boldFont = new Font("Helvetica", Font.BOLD, 14);
 
     private WelcomeFrame welcomeFrame;
 
@@ -41,14 +43,15 @@ public class ChatClientView extends JFrame {
         fileMenu.add(connectItem);
         fileMenu.add(exitItem);
 
-        pswdItem = new JMenuItem("Change password");
-        pswdItem.setFont(defualtFont);
-        userNameItem = new JMenuItem("Change username");
-        userNameItem.setFont(defualtFont);
+        settingItem = new JMenuItem("Manage Account");
+        settingItem.setFont(defualtFont);
+        deleteAccountItem = new JMenuItem("Delete account");
+        deleteAccountItem.setFont(defualtFont);
+        deleteAccountItem.setForeground(warningTextColor);
+
         settingMenu = new JMenu("Setting");
         settingMenu.setFont(defualtFont);
-        settingMenu.add(pswdItem);
-        settingMenu.add(userNameItem);
+        settingMenu.add(settingItem);
 
         menuBar = new JMenuBar();
         menuBar.add(fileMenu);
@@ -107,12 +110,8 @@ public class ChatClientView extends JFrame {
         connectItem.addActionListener(listener);
     }
 
-    public void addPasswordItemListener(ActionListener listener) {
-        pswdItem.addActionListener(listener);
-    }
-
-    public void addUsernameItemListener(ActionListener listener) {
-        userNameItem.addActionListener(listener);
+    public void addSettingItemListener(ActionListener listener) {
+        settingItem.addActionListener(listener);
     }
 
     public void addExitItemListener(ActionListener listener) {
@@ -153,7 +152,8 @@ public class ChatClientView extends JFrame {
     private JMenu settingMenu;
     private JMenuItem connectItem;
     private JMenuItem exitItem;
-    private JMenuItem pswdItem;
+    private JMenuItem settingItem;
+    private JMenuItem deleteAccountItem;
     private JMenuItem userNameItem;
 
     public static void main(String[] args) {

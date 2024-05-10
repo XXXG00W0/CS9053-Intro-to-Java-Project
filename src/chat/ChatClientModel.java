@@ -13,6 +13,9 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 import javax.crypto.BadPaddingException;
@@ -25,12 +28,17 @@ public class ChatClientModel implements Runnable {
 
 	public final static String HELLO = "HELLO";
 	public final static String CONNECTED = "CONNECTED";
-	private final static String LOGIN = "LOGIN";
+	public final static String LOGIN = "LOGIN";
 	public final static String REGISTER = "REGISTER";
-	private final static String OK = "OK";
-	private final static String NO_OK = "NO_OK";
+	public final static String OK = "OK";
+	public final static String MSG = "MSG";
+	public final static String NO_OK = "NO_OK";
 	public final static String DISCONNECT = "DISCONNECT";
 	public final static String TEST_ALIVE = "TEST_ALIVE";
+	public final static String CHANGE_PSWD = "CHANGE_PSWD";
+	public final static String CHANGE_USER = "CHANGE_USER";
+	public final static String DELETE = "DELETE";
+	public final static String[] ACTION_LIST = { LOGIN, REGISTER, CHANGE_PSWD, CHANGE_USER, DELETE };
 
 	private DataOutputStream toServer = null;
 	private DataInputStream fromServer = null;
@@ -40,13 +48,16 @@ public class ChatClientModel implements Runnable {
 
 	public final static int QUITTING = -3;
 	public final static int NOT_CONNECTED = 0;
-	public final static int HANDSHAKE_FAILED = -1;
+	// public final static int HANDSHAKE_FAILED = -1;
 	public final static int HANDSHAKE_OK = 1;
 	public final static int INCORRECT_CERTIFICATION = -2;
 	public final static int CERTIFICATED = 2;
 	public final static ArrayList<Integer> statusList = new ArrayList<>(Arrays.asList(QUITTING, NOT_CONNECTED,
-			HANDSHAKE_FAILED, HANDSHAKE_OK, INCORRECT_CERTIFICATION, CERTIFICATED));
+			/* HANDSHAKE_FAILED, */ HANDSHAKE_OK, INCORRECT_CERTIFICATION, CERTIFICATED));
 	private int status = NOT_CONNECTED;
+	BlockingQueue<String> messageQueue = new LinkedBlockingQueue<>();
+
+	private String username;
 
 	private int timeout = 5000;
 	private static final String RSA = "RSA";
@@ -102,7 +113,7 @@ public class ChatClientModel implements Runnable {
 			// If not receive string CONNECTED
 			if (!replyString.equals(CONNECTED)) {
 				logger.info("Illegal handshake procedure: " + replyString + '\n');
-				status = HANDSHAKE_FAILED;
+				status = NOT_CONNECTED;
 				connectionCleanup();
 				return false;
 			}
@@ -129,61 +140,186 @@ public class ChatClientModel implements Runnable {
 			logger.severe("Unknown exception: " + e.toString());
 			e.printStackTrace();
 		}
-		status = HANDSHAKE_FAILED;
+		status = NOT_CONNECTED;
 		return false;
 	}
 
-	public boolean register(String username, String password){
-		try{
-			sendMessage(REGISTER+" "+username+" "+password, true);
-			String message = receiveMessage(true);
-			logger.info("Register process receive from server: "+message);
+	public boolean register(String username, String password) {
+		try {
+			String message;
+			sendMessage(REGISTER + " " + username + " " + password, true);
+			// String message = receiveMessage(true);
+			try {
+				message = messageQueue.poll(5, TimeUnit.SECONDS);
+			} catch (InterruptedException ie) {
+				logger.warning("Timeout when waiting message");
+				return false;
+			}
+			logger.info("Register process get from queue: " + message);
 			String[] msgList = message.split(" ");
-			if (msgList.length != 2){
-				logger.info("Invalid register message from server: "+ message);
+			if (msgList.length != 2) {
+				logger.info("Invalid number of keyword in register message from server: " + message);
 				return false;
 			}
-			if (msgList[0] != REGISTER | msgList[1] != OK | msgList[1] != NO_OK){
-				logger.info("Invalid register message from server: "+ message);
+			if (msgList[0].equals(REGISTER)) {
+				if (msgList[1].equals(OK))
+					return true;
+				else if (msgList[1].equals(NO_OK))
+					return false;
+			} else {
+				logger.info("Invalid register message from server: " + message);
 				return false;
 			}
-			if(msgList[1] == OK)
-				return true;
-			else if(msgList[1] == NO_OK)
-				return false;
-		}catch(IOException | GeneralSecurityException e){
+		} catch (IOException | GeneralSecurityException e) {
+			logger.warning("Exception occurs when trying to register");
 		}
 		return false;
 	}
 
 	public boolean login(String username, String password) {
-		try{
-			sendMessage(LOGIN+" "+username+" "+password, true);
-			String message = receiveMessage(true);
+		try {
+			if (username == null | password == null | username.equals("") | password.equals("")) {
+				return false;
+			}
+			String message;
+			sendMessage(LOGIN + " " + username + " " + password, true);
+			// String message = receiveMessage(true);
+			try {
+				message = messageQueue.poll(5, TimeUnit.SECONDS);
+			} catch (InterruptedException ie) {
+				logger.warning("Timeout when waiting message");
+				return false;
+			}
+			logger.info("Login process get from queue: " + message);
+			if (message == null) {
+				return false;
+			}
 			String[] msgList = message.split(" ");
-			if (msgList.length != 2){
-				logger.info("Invalid login message from server: "+ message);
+			if (msgList.length != 2) {
+				logger.info("Invalid number of keywords in login message from server: " + message);
 				return false;
 			}
-			if (msgList[0] != LOGIN | msgList[1] != OK | msgList[1] != NO_OK){
-				logger.info("Invalid login message from server: "+ message);
+			if (msgList[0].equals(LOGIN)) {
+				if (msgList[1].equals(OK)) {
+					status = CERTIFICATED;
+					return true;
+				} else if (msgList[1].equals(NO_OK)) {
+					return false;
+				}
+			} else {
+				logger.info("Invalid login message from server: " + message);
 				return false;
 			}
-			if(msgList[1] == OK){
-				status = CERTIFICATED;
-				return true;
-			}
-			else if(msgList[1] == NO_OK){
+		} catch (IOException | GeneralSecurityException e) {
+			logger.warning("Exception occurs when trying to log in:\n" + e.getMessage());
+		}
+		return false;
+	}
+
+	public boolean changePassword(String username, String oldPassword, String newPassword) {
+		try {
+			// Three way handshake
+			String message;
+			sendMessage(CHANGE_PSWD + " " + username + " " + oldPassword + " " + newPassword, true);
+			try {
+				message = messageQueue.poll(5, TimeUnit.SECONDS);
+			} catch (InterruptedException ie) {
+				logger.warning("Timeout when waiting message");
 				return false;
 			}
-		}catch(IOException | GeneralSecurityException e){
+			logger.info("Change password get from queue: " + message);
+			String[] msgList = message.split(" ");
+			if (msgList.length != 2) {
+				logger.info("Invalid number of keywords in login message from server: " + message);
+				return false;
+			}
+			if (msgList[0].equals(CHANGE_PSWD)) {
+				if (msgList[1].equals(OK)) {
+					// sendMessage(CHANGE_PSWD+" "+OK, true);
+					return true;
+				} else if (msgList[1].equals(NO_OK)) {
+					return false;
+				}
+			} else {
+				logger.info("Invalid login message from server: " + message);
+				return false;
+			}
+		} catch (IOException | GeneralSecurityException e) {
+			logger.warning("Exception occurs when trying to change password");
+		}
+		return false;
+	}
+
+	public boolean changeUsername(String oldUsername, String newUsername, String password) {
+		try {
+			// Three way handshake
+			String message;
+			sendMessage(CHANGE_USER + " " + oldUsername + " " + password + " " + newUsername, true);
+			try {
+				message = messageQueue.poll(5, TimeUnit.SECONDS);
+			} catch (InterruptedException ie) {
+				logger.warning("Timeout when waiting message");
+				return false;
+			}
+			logger.info("Change username get from queue: " + message);
+			String[] msgList = message.split(" ");
+			if (msgList.length != 2) {
+				logger.info("Invalid number of keywords in message from server: " + message);
+				return false;
+			}
+			if (msgList[0].equals(CHANGE_USER)) {
+				if (msgList[1].equals(OK)) {
+					// sendMessage(CHANGE_PSWD+" "+OK, true);
+					return true;
+				} else if (msgList[1].equals(NO_OK)) {
+					return false;
+				}
+			} else {
+				logger.info("Invalid message from server: " + message);
+				return false;
+			}
+		} catch (IOException | GeneralSecurityException e) {
+			logger.warning("Exception occurs when trying to change password");
+		}
+		return false;
+	}
+
+	public boolean deleteAccount(String username, String password) {
+		try {
+			String message;
+			sendMessage(DELETE + " " + username + " " + password, true);
+			try {
+				message = messageQueue.poll(5, TimeUnit.SECONDS);
+			} catch (InterruptedException ie) {
+				logger.warning("Timeout when waiting message");
+				return false;
+			}
+			logger.info("Delete account message get from queue: " + message);
+			String[] msgList = message.split(" ");
+			if (msgList.length != 2) {
+				logger.info("Invalid number of keywords in message from server: " + message);
+				return false;
+			}
+			if (msgList[0].equals(DELETE)) {
+				if (msgList[1].equals(OK)) {
+					// sendMessage(CHANGE_PSWD+" "+OK, true);
+					return true;
+				} else if (msgList[1].equals(NO_OK)) {
+					return false;
+				}
+			} else {
+				logger.info("Invalid message from server: " + message);
+				return false;
+			}
+		} catch (IOException | GeneralSecurityException e) {
+			logger.warning("Exception occurs when trying to change password");
 		}
 		return false;
 	}
 
 	public void connectionCleanup() {
 		try {
-			if(communicationKey.equals(null))
+			if (communicationKey.equals(null))
 				sendString(toServer, null, DISCONNECT);
 			else
 				sendString(toServer, communicationKey, DISCONNECT);
@@ -277,19 +413,21 @@ public class ChatClientModel implements Runnable {
 
 	private String receiveMessage(DataInputStream inStream, Key key) {
 		String decodedString = null;
-		try {
-			String encryptedMessage = inStream.readUTF();
-			if (key == null) {
-				decodedString = encryptedMessage;
-			} else if (encryptedMessage.equals(DISCONNECT)) {
-				decodedString = encryptedMessage;
-			} else {
-				decodedString = Encryption.decrypt(key, encryptedMessage);
+		synchronized (inStream) {
+			try {
+				String encryptedMessage = inStream.readUTF();
+				if (key == null) {
+					decodedString = encryptedMessage;
+				} else if (encryptedMessage.equals(DISCONNECT)) {
+					decodedString = encryptedMessage;
+				} else {
+					decodedString = Encryption.decrypt(key, encryptedMessage);
+				}
+			} catch (IOException ioe) {
+				logger.warning("Cannot receive message with inStream: " + inStream + '\n');
+			} catch (GeneralSecurityException de) {
+				logger.warning(de.toString() + " Cannot decrypt message with key: " + key + '\n');
 			}
-		} catch (IOException ioe) {
-			logger.warning("Cannot receive message with inStream: " + inStream + '\n');
-		} catch (GeneralSecurityException de) {
-			logger.warning(de.toString() + " Cannot decrypt message with key: " + key + '\n');
 		}
 		return decodedString;
 	}
@@ -298,13 +436,20 @@ public class ChatClientModel implements Runnable {
 		return status;
 	}
 
-	public void setStatus(int status){
-		if (statusList.contains(status)){
+	public void setStatus(int status) {
+		if (statusList.contains(status)) {
 			this.status = status;
-		}else{
-			logger.warning("Cannot set status: "+status);
+		} else {
+			logger.warning("Cannot set status: " + status);
 		}
 
 	}
 
+	public void setUsername(String username) {
+		this.username = username;
+	}
+
+	public String getUsername() {
+		return this.username;
+	}
 }

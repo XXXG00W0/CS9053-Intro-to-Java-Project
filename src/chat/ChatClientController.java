@@ -336,6 +336,7 @@ public class ChatClientController implements Runnable {
                         model.setUsername("");
                         settingFrame.dispose();
                         view.initiateWelcomeFrame();
+                        view.clearTextArea();
                         model.setStatus(ChatClientModel.HANDSHAKE_OK);
                         message = "Account deleted";
                     }else{

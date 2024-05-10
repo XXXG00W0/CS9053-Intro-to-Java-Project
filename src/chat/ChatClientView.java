@@ -33,14 +33,14 @@ public class ChatClientView extends JFrame {
 
     public ChatClientView() {
         super("Chat client");
-        connectItem = new JMenuItem("Connect");
-        connectItem.setFont(defualtFont);
+//        connectItem = new JMenuItem("Connect");
+//        connectItem.setFont(defualtFont);
         // connectItem.addActionListener();
         exitItem = new JMenuItem("Exit");
         exitItem.setFont(defualtFont);
         fileMenu = new JMenu("File");
         fileMenu.setFont(defualtFont);
-        fileMenu.add(connectItem);
+//        fileMenu.add(connectItem);
         fileMenu.add(exitItem);
 
         settingItem = new JMenuItem("Manage Account");
@@ -134,6 +134,10 @@ public class ChatClientView extends JFrame {
         } else {
             textArea.append(string + '\n');
         }
+    }
+
+    public void clearTextArea() {
+        textArea.setText("");;
     }
 
     public void clearTextField() {
